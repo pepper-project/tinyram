@@ -1,0 +1,14 @@
+*.aux
+*.log
+*.dvi
+asm.ps
+asm.pdf
+*.bbl
+*.toc
+*.lof
+*.lot
+*.blg
+*.out
+*.nav
+*.snm
+*.vrb

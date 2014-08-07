@@ -1,0 +1,5 @@
+MAINCLASS=tinyram.asm.TrAsm
+GEN=gen
+SRC=src
+BUILD=build
+DIST=dist

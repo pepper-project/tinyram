@@ -1,0 +1,77 @@
+#!/usr/bin/perl -w
+# vim: syntax=perl
+
+use strict;
+
+# read inputs
+# grep on length gets rid of zero-length fields
+my $N = $ARGV[0];
+my $K = $ARGV[1];
+
+if ($N == 0 || $K == 0) {
+    print "Usage: $0 N K\n";
+}
+# multiply an N-element vector with an NxN sparse matrix containing at most K nonzero elements
+# input is N K <vector> <elements> <indices> <rptrs>
+#               N elms   K elms     K elms    N+1 elms
+
+# generate ptrs vector for CSR
+my @buckets = (0) x $N;
+my @ptrs = (0) x ($N + 1);
+for(my $i = 0; $i < $K; $i++) {
+    my $r;
+    do {
+        $r = int(rand($N));
+    } while ($buckets[$r] >= $N);
+    $buckets[$r]++;
+}
+for(my $i = 0; $i < $N; $i++) {
+    $ptrs[$i+1] = $ptrs[$i] + $buckets[$i];
+}
+
+# generate indices vector for CSR
+my @inds = (0) x $K;
+for(my $i = 0; $i < $N; $i++) {
+    @buckets = (0) x $N;
+    my $nelms = $ptrs[$i+1] - $ptrs[$i];
+
+    while ($nelms > 0) {
+        my $r = int(rand($N));
+        if ($buckets[$r] == 0) {
+            $buckets[$r] = 1;
+            $nelms--;
+        }
+    }
+
+    my $k = $ptrs[$i];
+    for(my $j = 0; $j < $N; $j++) {
+        if ($buckets[$j] != 0) {
+            $inds[$k++] = $j;
+        }
+    }
+}
+
+# generate random vector
+my @vector = (0) x $N;
+for (my $i = 0; $i < $N; $i++) {
+    $vector[$i] = int(rand(1024));
+}
+# generate random nonzero elements
+my @elms = (0) x $K;
+for (my $i = 0; $i < $K; $i++) {
+    $elms[$i] = int(rand(1024));
+}
+
+my @out = (0) x $N;
+for(my $i=0; $i<$N; $i++) {
+    for(my $j=$ptrs[$i]; $j < $ptrs[$i+1]; $j++) {
+        $out[$i] += $elms[$j] * $vector[$inds[$j]];
+    }
+}
+
+print "\$iter 0\ntape 0, $N\ntape 0, $K\ntape 0, ";
+print join("\ntape 0, ", @vector), "\ntape 0, ";
+print join("\ntape 0, ", @elms), "\ntape 0, ";
+print join("\ntape 0, ", @inds), "\ntape 0, ";
+print join("\ntape 0, ", @ptrs), "\ntape 1, ";
+print join("\ntape 1, ", @out), "\n";

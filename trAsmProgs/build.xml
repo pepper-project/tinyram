@@ -1,0 +1,92 @@
+<project name="trAsmProgs" default="dist" basedir=".">
+
+    <description>
+        assembler, simulator for TinyRAM ISA
+    </description>
+
+    <!-- set global properties for this build -->
+    <property environment="env"/>
+    <!-- set variables from the build.properties file -->
+    <property file="build.prop"/>
+    <!-- otherwise just hardcode them -->
+    <property name="MAINCLASS" value="tinyram.asm.TrAsm"/>
+    <property name="GEN" location="gen"/>
+    <property name="SRC" location="src"/>
+    <property name="BUILD" location="build"/>
+    <property name="DIST" location="dist"/>
+
+    <path id="project.class.path">
+        <pathelement path="${java.class.path}"/>
+        <pathelement path="${additional.path}"/>
+        <pathelement location="../lib/antlr-3.5.1-complete.jar"/>
+    </path>
+
+    <target name="init">
+        <!-- Create the time stamp -->
+        <tstamp/>
+        <!-- Create the build directory structure used by compile -->
+        <mkdir dir="${BUILD}"/>
+        <mkdir dir="${DIST}"/>
+        <copy todir="${GEN}">
+            <fileset dir="${SRC}"/>
+        </copy>
+    </target>
+
+    <target name="antlrG" depends="init"
+        description="run ANTLR on grammar input">
+        <java classname="org.antlr.Tool" fork="true" failonerror="true" classpathref="project.class.path">
+            <arg value="-verbose"/>
+            <arg value="-o"/>
+            <arg path="${GEN}/tinyram/asm/"/>
+            <arg path="${GEN}/tinyram/asm/TrAssembler.g"/>
+        </java>
+    </target>
+
+    <target name="antlrP" depends="antlrG"
+        description="run ANTLR on pre walker">
+        <java classname="org.antlr.Tool" fork="true" failonerror="true" classpathref="project.class.path">
+            <arg value="-verbose"/>
+            <arg value="-o"/>
+            <arg path="${GEN}/tinyram/asm/"/>
+            <arg path="${GEN}/tinyram/asm/TrPreWalk.g"/>
+        </java>
+    </target>
+
+    <target name="antlrW" depends="antlrP"
+        description="run ANTLR on asm walker">
+        <java classname="org.antlr.Tool" fork="true" failonerror="true" classpathref="project.class.path">
+            <arg value="-verbose"/>
+            <arg value="-o"/>
+            <arg path="${GEN}/tinyram/asm/"/>
+            <arg path="${GEN}/tinyram/asm/TrAsmWalk.g"/>
+        </java>
+    </target>
+
+    <target name="compile" depends="antlrW"
+        description="compile" >
+        <!-- Compile the java code from ${src} into ${build} -->
+        <javac target="1.7" source="1.7" includeantruntime="false" srcdir="${GEN}" destdir="${BUILD}" classpathref="project.class.path" debug="true">
+            <!-- <compilerarg value="-Xlint"/> -->
+        </javac>
+    </target>
+
+    <target name="dist" depends="compile"
+        description="generate jarfile">
+
+        <!-- Put everything in ${build} into the dist jar file -->
+        <jar jarfile="${DIST}/trAsmProgs.jar" basedir="${BUILD}">
+            <manifest>
+                <attribute name="Main-Class" value="${MAINCLASS}"/>
+            </manifest>
+        </jar>
+    </target>
+
+    <target name="clean"
+        description="clean up" >
+        <!-- Delete the ${build} and ${dist} directory trees -->
+        <delete dir="${BUILD}"/>
+        <delete dir="${DIST}"/>
+        <delete dir="${GEN}"/>
+    </target>
+
+</project>

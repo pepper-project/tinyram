@@ -1,0 +1,62 @@
+#!/usr/bin/perl -w
+# vim: syntax=perl
+
+use strict;
+
+# fwd declarations
+sub from_rat;
+
+# read inputs
+# grep on length gets rid of zero-length fields
+my @inputs = map { &from_rat($_); } grep(length, split(/[\s\[\]]+/, <STDIN>));
+my $L = shift(@inputs);
+my $A = shift(@inputs);
+my $H = shift(@inputs);
+
+if (scalar(@inputs) != $L + $H) {
+    print "Error: Expected input size of ", $L + $H, " but got ", scalar(@inputs), "\n";
+    exit(-1);
+}
+
+my @needle = @inputs[0 .. $L - 1];
+my @haystack = @inputs[$L .. $L + $H - 1];
+my $hlen = scalar(@haystack);
+my $last = $L - 1;
+
+# generate occurs shift table
+my @occurs = ($L) x $A;
+for (my $i = 0; $i < $last; $i++) {
+    $occurs[$needle[$i]] = $last - $i;
+}
+
+my $hoff = 0;
+my $result = $H;
+
+outer: while ($hlen >= $L) {
+    for (my $i = $last; $haystack[$hoff + $i] == $needle[$i]; $i--) {
+        if ($i == 0) {
+            $result = $hoff;
+            last outer;
+        }
+    }
+
+    # if we got here, we found a mismatch;
+    my $skip = $occurs[$haystack[$hoff + $last]];
+    $hlen -= $skip;
+    $hoff += $skip;
+}
+
+print STDOUT $result;
+print STDERR "\n", $result, "\n";
+
+# takes 2%1 and returns 2 - always an integer
+sub from_rat {
+    my $rat = shift(@_);
+    my ($num, $den) = split(/%/,$rat);
+
+    if (defined($den)) {
+        return int($num / $den);
+    } else {
+        return int($num);
+    }
+}

@@ -1,0 +1,44 @@
+#!/usr/bin/perl -w
+# vim: syntax=perl
+
+use strict;
+
+# fwd declarations
+sub from_rat;
+
+# read inputs
+# grep on length gets rid of zero-length fields
+my @inputs = map { &from_rat($_); } grep(length, split(/[\s\[\]]+/, <STDIN>));
+my $L = shift(@inputs);
+my $A = shift(@inputs);
+
+if (scalar(@inputs) < $L) {
+    print "Error: Expected input size of ", $L, " but got ", scalar(@inputs), "\n";
+    exit(-1);
+}
+
+my @occurs = ($L) x $A;
+# generate occurs shift table
+my $last = $L - 1;
+for (my $i = 0; $i < $last; $i++) {
+    $occurs[$inputs[$i]] = $last - $i;
+}
+
+print STDOUT join(' ', @occurs[0 .. $A - 1]), "\n";
+print STDERR "\n", join(' ', @occurs[0 .. $A - 1]), "\n";
+
+##
+## SUBROUTINES
+##
+
+# takes 2%1 and returns 2 - always an integer
+sub from_rat {
+    my $rat = shift(@_);
+    my ($num, $den) = split(/%/,$rat);
+
+    if (defined($den)) {
+        return int($num / $den);
+    } else {
+        return int($num);
+    }
+}

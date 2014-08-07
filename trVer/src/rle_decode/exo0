@@ -1,0 +1,48 @@
+#!/usr/bin/perl -w
+# vim: syntax=perl
+
+use strict;
+
+# fwd declarations
+sub from_rat;
+
+# read inputs
+# grep on length gets rid of zero-length fields
+my @inputs = map { &from_rat($_); } grep(length, split(/[\s\[\]]+/, <STDIN>));
+my $O = shift(@inputs);
+
+if (scalar(@inputs) < 2*$O) {
+    print "Error: Expected input size of ", 2*$O, " but got ", scalar(@inputs), "\n";
+    exit(-1);
+}
+
+my $optr = 0;
+my @output;
+
+for(my $i=0; $optr < $O; $i += 2) {
+    my $data = $inputs[$i];
+    my $len = $inputs[$i + 1];
+
+    for(my $j = 0; $j <= $len; $j++) {
+        $output[$optr++] = $data;
+    }
+}
+
+print STDOUT join(' ', @output[0 .. $O - 1]), "\n";
+print STDERR "\n", join(' ', @output[0 .. $O - 1]), "\n";
+
+##
+## SUBROUTINES
+##
+
+# takes 2%1 and returns 2 - always an integer
+sub from_rat {
+    my $rat = shift(@_);
+    my ($num, $den) = split(/%/,$rat);
+
+    if (defined($den)) {
+        return int($num / $den);
+    } else {
+        return int($num);
+    }
+}

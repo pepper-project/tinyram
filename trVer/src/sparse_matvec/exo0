@@ -1,0 +1,53 @@
+#!/usr/bin/perl -w
+# vim: syntax=perl
+
+use strict;
+
+# fwd declarations
+sub from_rat;
+
+# read inputs
+# grep on length gets rid of zero-length fields
+my @inputs = map { &from_rat($_); } grep(length, split(/[\s\[\]]+/, <STDIN>));
+my $N = shift(@inputs);
+my $K = shift(@inputs);
+
+# multiply an N-element vector with an NxN sparse matrix containing at most K nonzero elements
+# input is N K <vector> <elements> <indices> <rptrs>
+#               N elms   K elms     K elms    N+1 elms
+
+my $insize = 2*$N + 2*$K + 1;
+if (scalar(@inputs) != $insize) {
+    print "Error: Expected input size of ", $insize, " but got ", scalar(@inputs), "\n";
+    exit(-1);
+}
+
+my @vector = @inputs[0 .. $N - 1];
+my $base += $N;
+my @elms = @inputs[$base .. $base + $K - 1];
+$base += $K;
+my @inds = @inputs[$base .. $base + $K - 1];
+$base += $K;
+my @ptrs = @inputs[$base .. $base + $N];
+
+my @out = (0) x $N;
+for(my $i=0; $i<$N; $i++) {
+    for(my $j=$ptrs[$i]; $j < $ptrs[$i+1]; $j++) {
+        $out[$i] += $elms[$j] * $vector[$inds[$j]];
+    }
+}
+
+print STDOUT join(' ', @out);
+print STDERR "\n", join(' ', @out), "\n";
+
+# takes 2%1 and returns 2 - always an integer
+sub from_rat {
+    my $rat = shift(@_);
+    my ($num, $den) = split(/%/,$rat);
+
+    if (defined($den)) {
+        return int($num / $den);
+    } else {
+        return int($num);
+    }
+}

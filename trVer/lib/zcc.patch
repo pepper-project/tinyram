@@ -1,0 +1,422 @@
+--- bin/zcc 2014-08-06 14:05:03.081431654 -0400
++++ bin/zcc	2014-08-06 14:05:03.085431654 -0400
+@@ -8,10 +8,12 @@
+ verbose=1
+ 
+ #When 0, adds "#include<stdinc.h>" to the top of every c file
++BASEDIR=$(dirname $0)
++RUNDIR=$(pwd)
+ nostdinc=1
+ path=
+ build=
+-targetdir=.
++targetdir=__UNSET__
+ bugginess=0.1
+ windowsize=
+ prefix=
+@@ -25,10 +27,17 @@
+ cql=0
+ cqltest=0
+ cstdarithtruncate=0
++nobackend=0
++nofrontend=0
++
++main () 
++
++{
++
+ while [ $# -gt 0 ]
+ do
+     case "$1" in
+-	--no-build)  javac="--no-build";;
++	--no-build)  build="--no-build";;
+ 	--no-inline)  inlining="";;
+ 	--no-opt)  optimize=0;;
+ 	--metrics)  metrics=1;;
+@@ -38,6 +47,10 @@
+ 	--cstdarithtruncate) cstdarithtruncate=1;;
+ 	--cql)  cql=1;;
+ 	--cqltest)  cqltest=1;;
++    --zccdir) BASEDIR="$2"; shift;;
++    --rundir) RUNDIR="$2"; shift;;
++    --frontendonly) nobackend=1;;
++    --backendonly) nofrontend=1;;
+ 	-f)  path="$2"; shift;;
+ 	-b)  bugginess="$2"; shift;;
+ 	-d)  targetdir="$2"; shift;;
+@@ -49,60 +62,65 @@
+ 	-db-thr-num-addresses-naive) dbThrNumAddressesNaive="$2"; shift;;
+   -ram-cell-num-bits) ramCellNumBits="$2"; shift;;
+ 	-db-hash-num-bits) dbHashNumBits="$2"; shift;;
+-  -fast-ram-word-width) fastRAMWordWidth="$2";shift;;
+-  -fast-ram-address-width) fastRAMAddressWidth="$2";shift;;
+-        --) shift; break;;
+-        -*)
+-	  echo -e >&2 \
+-	  "usage: $0 [--no-build] {-f <sfdl file>} {-t <framework>} {-w <windowsize>} [--no-inline] [--metrics] [--staticp] [--ecs] [--limcsize] [--cql] [-prefix <prefix>] [-d <dir>]\n" \
+-	  "   --no-build : skip building of the frontend\n" \
+-	  "   --no-inline : skip the expression inlining optimization (i.e. run in 'fairplay mode') \n" \
+-	  "   --metrics	 : Output information about the size of the computation being compiled \n" \
+-	  "   --staticp	 : Don't use a prover worksheet, rather compile the computation into the prover statically\n" \
+-	  "   --ecs   	 : eliminate common subexpressions (WARNING: Huge memory usage) \n" \
+-	  "   --limcsize : prevent compiler optimizations if they would increase constraint size \n" \
+-	  "   --cql	: enable CQL functionality inside C source file.\n" \
+-	  "   --cqltest	: test CQL functionality.\n" \
+-	  "   -d	 : the destination root for output files\n" \
+-	  "   -b	 : how buggy to make the buggy prover\n" \
+-	  "   -w	 : size of compiler's optimization window (higher values increase memory use, -1 => infinite size window)\n" \
+-	  "   -t	 : which framework to output to (GINGER or ZAATAR)\n" \
+-	  "   -prefix    : filename prefix (may contain path separators) for all generated files \n" 
+-	  exit 1;;
++    -fast-ram-word-width) fastRAMWordWidth="$2";shift;;
++    -fast-ram-address-width) fastRAMAddressWidth="$2";shift;;
++    --) shift; break;;
++    -*) show_help; exit 1;;
+ 	*)  break;; # terminate while loop
+     esac
+     shift
+ done 
+ 
+-if [ "$path" == "" ] || [ "$framework" == "" ]; then
+-{
+-	  echo -e >&2 \
+-	  "usage: $0 [--no-build] {-f <sfdl file>} {-t <framework>} {-w <windowsize>} [--no-inline] [--metrics] [--staticp] [--ecs] [--limcsize] [--cql] [-prefix <prefix>] [-d <dir>]\n" \
+-	  "   --no-build : skip building of the frontend\n" \
+-	  "   --no-inline : skip the expression inlining optimization (i.e. run in 'fairplay mode') \n" \
+-	  "   --metrics	 : Output information about the size of the computation being compiled \n" \
+-	  "   --staticp	 : Don't use a prover worksheet, rather compile the computation into the prover statically\n" \
+-	  "   --ecs   	 : eliminate common subexpressions (WARNING: Huge memory usage) \n" \
+-	  "   --limcsize : prevent compiler optimizations if they would increase constraint size \n" \
+-	  "   --cql	: enable CQL functionality inside C source file.\n" \
+-	  "   --cqltest	: test CQL functionality.\n" \
+-	  "   -d	 : the destination root for output files\n" \
+-	  "   -b	 : how buggy to make the buggy prover\n" \
+-	  "   -w	 : size of compiler's optimization window (higher values increase memory use, -1 => infinite size window)\n" \
+-	  "   -t	 : which framework to output to (GINGER or ZAATAR)\n" \
+-	  "   -prefix    : filename prefix (may contain path separators) for all generated files \n" 
++# required arguments
++if ( [ "$path" == "" ] || [ "$framework" == "" ] || ( [ "$windowsize" == "" ] && [ $nofrontend != 1 ] ) ) ; then
++    show_help
+     exit 1
+-} fi
++fi
+ 
++## prevent some gotchas:
++# make sure basedir, rundir, input filename, destdir are absolute paths
++BASEDIR=$(readlink_fn "$BASEDIR")
++mkdir -p "$RUNDIR"
++RUNDIR=$(readlink_fn "$RUNDIR")
++path=$(readlink_fn "$path")
++if [ "$targetdir" == "__UNSET__" ]; then
++    targetdir="$RUNDIR"
++else
++    mkdir -p "$targetdir"
++    targetdir=$(readlink_fn "$targetdir")
++fi
++if [ $nobackend == 0 ]; then
++    mkdir -p "$targetdir"/bin
++    mkdir -p "$targetdir"/apps_sfdl_hw "$targetdir"/apps_sfdl_gen
++fi
++
++if ( [ ! -d "$BASEDIR" ] || [ ! -d "$BASEDIR""/frontend" ] || [ ! -d "$BASEDIR""/Gocode" ] || [ ! -d "$BASEDIR""/cstdinc" ] || [ ! -d "$BASEDIR""/backend" ] ); then
++    echo
++    echo ">>ERROR: $BASEDIR does not seem to contain the compiler distribution. Please specify path to compiler with --zccdir <dir>"
++    echo
++    exit 1
++fi
++
++# make sure we start in rundir
++cd "$RUNDIR"
+ 
+ if [ "$prefix" == "" ]; then
+ {
+     prefix=$(basename "$path")
+     prefix="${prefix%.*}"
++    if [ $nofrontend == 1 ];  then
++        prefix="apps_sfdl_gen/${prefix%%.*}"
++    else
++        prefix="${prefix%.*}"
++    fi
+ } fi
+ 
+ filename=$(basename "$path")
+-classname="${filename%.*}" #todo - something fancier?
++if [ $nofrontend == 1 ]; then # todo - something fancier?
++    classname="${filename%%.*}"
++else
++    classname="${filename%.*}"
++fi
+ extension="${filename##*.}"
+ defsfile="$filename.defines"
+ echo "" > "$defsfile"
+@@ -112,6 +130,17 @@
+ TIMER="$TIME_BIN -o tmptime -f"
+ PRINT_TIME=
+ 
++if [ $nofrontend == 0 ]; then
++{
++
++# make sure we don't overwrite the input file!
++if [ "$filename" == "$path" ]; then
++    echo
++    echo ">>ERROR: Refusing to overwrite input file $path with intermediate file. You probably want to use --rundir"
++    echo
++    exit 1
++fi
++
+ # If the source file is a .c file, run the preprocessor on it first.
+ if [ "$extension" == "c" ]; then
+ {
+@@ -130,12 +159,12 @@
+ 
+   if [ $cql == 1 ]; then
+   {
+-    cd frontend
++    cd "$BASEDIR"/frontend
+     make cql
+-    cd ..
++    cd "$RUNDIR"
+ 
+     echo "" > "${filename}tmp1.c"
+-    cat "${filename}tmp.c" | java -cp "frontend/thirdparty/cassandra/build/apache-cassandra-1.2.2-SNAPSHOT.jar:frontend/thirdparty/cassandra/lib/*:frontend/bin/cql" CQLToKVStore >> "${filename}tmp1.c"
++    cat "${filename}tmp.c" | java -cp "$BASEDIR""/frontend/thirdparty/cassandra/build/apache-cassandra-1.2.2-SNAPSHOT.jar:""$BASEDIR""frontend/thirdparty/cassandra/lib/*:""$BASEDIR""frontend/bin/cql" CQLToKVStore >> "${filename}tmp1.c"
+     mv "${filename}tmp1.c" "${filename}tmp.c"
+     if [ $cqltest == 1 ]; then
+     {
+@@ -144,7 +173,7 @@
+     } fi
+   } fi
+ 
+-  gcc -nostdinc -undef -E -P -I cstdinc -I ../pepper/apps_sfdl/ -o "$filename" "${filename}tmp.c"
++  gcc -nostdinc -undef -E -P -I "$(dirname "$path")" -I "$BASEDIR"/cstdinc -I "$BASEDIR"/../pepper/apps_sfdl/ -o "$filename" "${filename}tmp.c"
+   if [ $? != 0 ]; then 
+   {
+     echo "Error in C preprocessor on $path"
+@@ -212,11 +241,10 @@
+ 
+ #Build the frontend
+ if [ "$build" != "--no-build" ]; then
+-    cd frontend
++    cd "$BASEDIR"/frontend
+     make
+-    cd ..
+     
+-    cd Gocode
++    cd "$BASEDIR"/Gocode
+     export GOPATH=$(pwd)
+     go build vericomp
+ 
+@@ -232,7 +260,7 @@
+       exit 1 
+     } fi
+ 
+-    cd ..
++    cd "$RUNDIR"
+ fi
+ 
+ if [ $optimize != 0 ]; then
+@@ -240,7 +268,7 @@
+ 
+ #Compile the raw source file, with expression combining of ifs (happens only here)
+ #Also, we perform all type checking on this pass.
+-$TIMER "metric_compile_1_utime $classname %U\nmetric_compile_1_stime $classname %S\n" java "$javaargs" -cp frontend/bin zcc.ZCC $compileropts ct${inlining}w "$path"
++$TIMER "metric_compile_1_utime $classname %U\nmetric_compile_1_stime $classname %S\n" java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC $compileropts ct${inlining}w "$path"
+ 
+ if [ $? != 0 ]; then 
+ { 
+@@ -260,7 +288,7 @@
+ 
+ $PRINT_TIME
+ 
+-$TIMER "metric_compile_p2_utime $classname %U\nmetric_compile_p2_stime $classname %S\n" java "$javaargs" -cp frontend/bin zcc.ZCC $compileropts p "${circuitFile}2.tac"
++$TIMER "metric_compile_p2_utime $classname %U\nmetric_compile_p2_stime $classname %S\n" java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC $compileropts p "${circuitFile}2.tac"
+ 
+ if [ $? != 0 ]; then 
+ { 
+@@ -274,7 +302,7 @@
+ $PRINT_TIME
+ 
+ #Do optimization based on the .profile file
+-$TIMER "metric_compile_2_utime $classname %U\nmetric_compile_2_stime $classname %S\n" java "$javaargs" -cp frontend/bin zcc.ZCC --profile ${circuitFile}2.profile ${circuitFile}2 $compileropts c${inlining}wfa "$path"
++$TIMER "metric_compile_2_utime $classname %U\nmetric_compile_2_stime $classname %S\n" java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC --profile ${circuitFile}2.profile ${circuitFile}2 $compileropts c${inlining}wfa "$path"
+ 
+ if [ $? != 0 ]; then 
+ { 
+@@ -293,7 +321,7 @@
+ #Redundant code elimination doesn't scale. It requires holding the entire circuit in a content addressable database
+ #  mv -f "$circuitFile" "${circuitFile}3"
+ #  tac "${circuitFile}3" > "${circuitFile}3.tac"
+-#  java "$javaargs" -cp frontend/bin zcc.ZCC --profile ${circuitFile}3 $compileropts rw "$path"
++#  java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC --profile ${circuitFile}3 $compileropts rw "$path"
+ #  if [ $? != 0 ]; then 
+ #  { 
+ #    exit 1 
+@@ -309,7 +337,7 @@
+ $TIMER "metric_compile_tac4_utime $classname %U\nmetric_compile_tac4_stime $classname %S\n" perl -e 'print reverse <>' < "${circuitFile}4" > "${circuitFile}4.tac"
+ 
+ $PRINT_TIME
+-$TIMER "metric_compile_p4_utime $classname %U\nmetric_compile_p4_stime $classname %S\n" java "$javaargs" -cp frontend/bin zcc.ZCC $compileropts p ${circuitFile}4.tac
++$TIMER "metric_compile_p4_utime $classname %U\nmetric_compile_p4_stime $classname %S\n" java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC $compileropts p ${circuitFile}4.tac
+ if [ $? != 0 ]; then 
+ { 
+   exit 1 
+@@ -321,7 +349,7 @@
+ 
+ $PRINT_TIME
+ #Run the compiler
+-$TIMER "metric_compile_4_utime $classname %U\nmetric_compile_4_stime $classname %S\n" java "$javaargs" -cp frontend/bin zcc.ZCC --profile ${circuitFile}4.profile ${circuitFile}4 $compileropts cfwa "$path"
++$TIMER "metric_compile_4_utime $classname %U\nmetric_compile_4_stime $classname %S\n" java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC --profile ${circuitFile}4.profile ${circuitFile}4 $compileropts cfwa "$path"
+ if [ $? != 0 ]; then 
+ { 
+   exit 1 
+@@ -339,7 +367,7 @@
+ { # No optimize
+ 
+ #Just run a single pass to produce an unoptimized spec file
+-java "$javaargs" -cp frontend/bin zcc.ZCC $compileropts ct${inlining}w "$path"
++java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC $compileropts ct${inlining}w "$path"
+ if [ $? != 0 ]; then 
+ { 
+   exit 1 
+@@ -349,10 +377,10 @@
+ mv -f "$circuitFile" "${circuitFile}4"
+ #Perform profiling on the circuit
+ tac "${circuitFile}4" > "${circuitFile}4.tac"
+-java "$javaargs" -cp frontend/bin zcc.ZCC $compileropts p ${circuitFile}4.tac
++java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC $compileropts p ${circuitFile}4.tac
+ tac "${circuitFile}4.tac.profile" > "${circuitFile}4.profile"
+ #Run the compiler
+-java "$javaargs" -cp frontend/bin zcc.ZCC --profile ${circuitFile}4.profile ${circuitFile}4 $compileropts cfwa "$path"
++java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC --profile ${circuitFile}4.profile ${circuitFile}4 $compileropts cfwa "$path"
+ if [ $? != 0 ]; then 
+ { 
+   exit 1 
+@@ -362,24 +390,33 @@
+ 
+ #spec file produced
+ specfile="$filename.$framework.spec"
++}
++else
++specfile="$filename"
++fi
++
++if [ $nobackend == 0 ]; then
++{
+ 
+ #No compilation needed with python code (purely interpreted)
+-cd backend
+-specfile="../$specfile"
++cd "$BASEDIR"/backend
++specfile="$RUNDIR/$specfile"
+ 
+ #if [ "$verbose" == "1" ]; then
+ #  echo "Running python backend"
+ #fi
+ 
+-backendArgs="-c $classname -s $specfile -d ../$targetdir"
++backendArgs="-c $classname -s $specfile -d $targetdir"
+ backendArgs+=" -o $prefix -b $bugginess -t $framework"
+ backendArgs+=" -m $metrics -w $worksheetMode"
+-backendArgs+=" --db-hash-func $dbHashFunc"
+-backendArgs+=" --db-num-addresses $dbNumAddresses"
+-backendArgs+=" --ram-cell-num-bits $ramCellNumBits"
+-backendArgs+=" --fast-ram-word-width $fastRAMWordWidth"
+-backendArgs+=" --fast-ram-address-width $fastRAMAddressWidth"
+-backendArgs+=" --language $extension"
++backendArgs+=${fastRAMWordWidth:+" --fast-ram-word-width $fastRAMWordWidth"}
++backendArgs+=${fastRAMAddressWidth:+" --fast-ram-address-width $fastRAMAddressWidth"}
++backendArgs+=${dbHashFunc:+" --db-hash-func $dbHashFunc"}
++backendArgs+=${dbNumAddresses:+" --db-num-addresses $dbNumAddresses"}
++backendArgs+=${ramCellNumBits:+" --ram-cell-num-bits $ramCellNumBits"}
++if [ $nofrontend != 1 ]; then
++    backendArgs+=" --language $extension"
++fi
+ 
+ #echo $backendArgs
+ 
+@@ -391,6 +428,84 @@
+ } fi
+ 
+ $PRINT_TIME
++} fi
+ 
+ #Move .spec file to generated directory
+-mv -f $specfile "../$targetdir/$prefix.$framework.spec"
++if [ $nofrontend == 0 ]; then
++    echo "Copying "$(basename "$specfile")" to $prefix.$framework.spec"
++    cp $specfile "$targetdir/$prefix.$framework.spec"
++fi
++
++}
++
++show_help () {
++  echo -e >&2 \
++  "usage: $0 [--no-build] {-f <sfdl file>} {-t <framework>} {-w <windowsize>} [--no-inline] [--metrics] [--staticp] [--ecs] [--limcsize] [--cql] [-prefix <prefix>] [-d <dir>]\n" \
++  "   --no-build          : skip building of the frontend\n" \
++  "   --no-inline         : skip the expression inlining optimization (i.e. run in 'fairplay mode') \n" \
++  "   --no-opt            : skip optimization \n" \
++  "   --metrics	          : Output information about the size of the computation being compiled \n" \
++  "   --staticp	          : Don't use a prover worksheet, rather compile the computation into the prover statically\n" \
++  "   --ecs   	          : eliminate common subexpressions (WARNING: Huge memory usage) \n" \
++  "   --limcsize          : prevent compiler optimizations if they would increase constraint size \n" \
++  "   --cstdarithtruncate : ensure ANSI C arithmetic compliance  \n" \
++  "   --cql	              : enable CQL functionality inside C source file.\n" \
++  "   --cqltest	          : test CQL functionality.\n" \
++  "   --zccdir            : compiler runtime directory (default: \`dirname \$0\`)\n"\
++  "   --rundir            : directory in which to compile (default: .)\n"\
++  "   --frontendonly      : run frontend only\n"\
++  "   --backendonly       : run backend only (input file should be in spec format)\n"\
++  "   -f                  : input filename\n"\
++  "   -d	              : the destination root for output files\n" \
++  "   -b	              : how buggy to make the buggy prover\n" \
++  "   -w	              : size of compiler's optimization window (higher values increase memory use, -1 => infinite size window)\n" \
++  "   -t	              : which framework to output to (GINGER or ZAATAR)\n" \
++  "   -prefix             : filename prefix (may contain path separators) for all generated files \n" \
++  "   -db-hash-func       : FIXME:no description\n"\
++  "   -db-num-addresses   : FIXME:no description\n"\
++  "   -ram-cell-num-bits  : FIXME:no description\n"\
++  "   -db-has-num-bits    : FIXME:no description\n"\
++  "   -fast-ram-word-width : FIXME:no description\n"\
++  "   -fast-ram-address-width : FIXME:no descrption\n"
++}
++
++
++# do we have gnu readlink or another one whose behavior is unpredictable?
++has_gnu_readlink () {
++    readlink --help &>/dev/null;
++    if [ $? != 0 ]; then
++        return 1;
++    else
++        return 0;
++    fi
++}
++
++# canonicalize the path for our recursive readlinking
++readlink_fn_simple () {
++    cPath=$(cd -P -- "$(dirname -- "$1")" &>/dev/null && echo $(pwd -P)/$(basename -- "$1"))
++    echo "$cPath"
++}
++
++# if you're running this on a mac, you probably have a shitty version of readlink that is broken so we fake it
++readlink_fn () {
++    if has_gnu_readlink; then
++        echo "$(readlink -f -- "$1")"
++    else
++        cPath=$(readlink_fn_simple "$1")
++
++        while [ -L "$cPath" ]; do
++            lDest=$(/bin/ls -l -- "$cPath" | sed 's/.*[[:space:]]->[[:space:]]//')
++
++            if $(echo $lDest | grep -qE '^/'); then
++                tcPath=$lDest;
++            else
++                tcPath=$(dirname -- "$cPath")/$lDest;
++            fi
++            cPath=$(readlink_fn_simple "$tcPath")
++        done
++
++        echo "$cPath"
++    fi
++}
++
++main "$@"

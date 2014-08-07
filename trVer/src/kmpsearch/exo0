@@ -1,0 +1,77 @@
+#!/usr/bin/perl -w
+# vim: syntax=perl
+
+use strict;
+
+# fwd declarations
+sub from_rat;
+
+# read inputs
+# grep on length gets rid of zero-length fields
+my @inputs = map { &from_rat($_); } grep(length, split(/[\s\[\]]+/, <STDIN>));
+my $N = shift(@inputs);
+my $H = shift(@inputs);
+
+if (scalar(@inputs) != $N + $H) {
+    print "Error: Expected input size of ", $N + $H, " but got ", scalar(@inputs), "\n";
+    exit(-1);
+}
+
+my @needle = @inputs[0 .. $N - 1];
+my @haystack = @inputs[$N .. $N + $H - 1];
+my $last = $N - 1;
+
+my @table;
+# first two entries are always -1 and 0. we represent -1 as $N, since
+# that's 1 past the end of the needle
+push @table, -1;
+push @table, 0;
+my $tpos = 2;
+my $cand = 0;
+
+while($tpos < $N) {
+    if ($needle[$tpos - 1] eq $needle[$cand]) {     # substring continues
+        $cand++;
+        $table[$tpos++] = $cand;
+    } elsif ($cand > 0) {                           # fall back, if possible
+        $cand = $table[$cand];
+    } else {                                        # failed to find a prefix
+        $table[$tpos++] = 0;
+    }
+}
+
+my $found = $H;
+my $m = 0;  # index in the haystack
+my $i = 0;  # index in the needle
+
+my $end = $H - $N;
+while ($m <= $end) {
+    if ($needle[$i] eq $haystack[$m + $i]) {
+        if ($i == $last) {
+            $found = $m;
+            last;
+        }
+        $i++;
+    } elsif ($table[$i] > 0) {
+        $i = $table[$i];
+        $m = $m + $i - $table[$i];
+    } else {
+        $i = 0;
+        $m++;
+    }
+}
+
+print STDOUT $found;
+print STDERR "\n$found\n";
+
+# takes 2%1 and returns 2 - always an integer
+sub from_rat {
+    my $rat = shift(@_);
+    my ($num, $den) = split(/%/,$rat);
+
+    if (defined($den)) {
+        return int($num / $den);
+    } else {
+        return int($num);
+    }
+}

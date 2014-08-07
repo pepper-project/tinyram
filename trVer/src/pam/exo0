@@ -1,0 +1,139 @@
+#!/usr/bin/perl -w
+# vim: syntax=perl
+
+use strict;
+
+# fwd declarations
+sub from_rat;
+sub get_cost;
+sub get_point_cost;
+sub get_distance;
+
+# read inputs
+# grep on length gets rid of zero-length fields
+my @inputs = map { &from_rat($_); } grep(length, split(/[\s\[\]]+/, <STDIN>));
+my $D = shift(@inputs);
+my $M = shift(@inputs);
+my $K = shift(@inputs);
+my $L = shift(@inputs);
+if (scalar(@inputs) != $D * $M) {
+    print "Error: Expected input size of ", $D*$M, " but got ", scalar(@inputs), "\n";
+    exit(-1);
+} elsif ($M <= $K) {
+    print "Error: M must be greater than K, but got (M,K) = ($M,$K)\n";
+    exit(-1);
+}
+
+# the points; the first K of them are the medoids
+# we arbitrarily choose the first points as the
+# initial medoids
+my @points;
+for (my $i=0; $i<$M; $i++) {
+    $points[$i] = $i;
+}
+
+my $present_cost = &get_cost();
+
+# run L iterations trying to find the best medoid arrangement
+for (my $l=0; $l<$L; $l++) {
+    for (my $i=0; $i<$K; $i++) {
+        for (my $j=$K; $j<$M; $j++) {
+            # swap ith medoid and jth point
+            my $temp = $points[$i];
+            $points[$i] = $points[$j];
+            $points[$j] = $temp;
+
+            my $new_cost = &get_cost();
+            if ($new_cost < $present_cost) {
+                $present_cost = $new_cost;
+            } else {
+                # switch back if previous arrangement was better
+                $points[$j] = $points[$i];
+                $points[$i] = $temp;
+            }
+        }
+    }
+}
+
+my @results;
+# now put out the result
+for (my $i=0; $i<$K; $i++) {
+    # the nth medoid is always in its own cluster
+    $results[$i] = $points[$i];
+}
+
+for (my $i=$K; $i<$M; $i++) {
+    $results[$i] = $points[0];
+    my $dist = &get_distance($i, 0);
+
+    for (my $j=1; $j<$K; $j++) {
+        my $new_dist = &get_distance($i, $j);
+        if ($new_dist < $dist) {
+            $results[$i] = $points[$j];
+            $dist = $new_dist;
+        }
+    }
+}
+
+my $result = join(" ",@results);
+print STDOUT $result, "\n";
+print STDERR "\n", $result, "\n";
+
+##
+## SUBROUTINES
+##
+
+# takes 2%1 and returns 2 - always an integer
+sub from_rat {
+    my $rat = shift(@_);
+    my ($num, $den) = split(/%/,$rat);
+
+    if (defined($den)) {
+        return int($num / $den);
+    } else {
+        return int($num);
+    }
+}
+
+# get the cost associated with the present arrangement represented by @points
+sub get_cost {
+    my $cost = 0;
+    # compute the cost of each point
+    for (my $i=$K; $i<$M; $i++) {
+        $cost += &get_point_cost($i);
+    }
+    return $cost;
+}
+
+# get the cost associated with a single point, that is, the distance from
+# its closest medoid
+sub get_point_cost {
+    my $point = shift(@_);
+
+    # distance from the 0th medoid
+    my $cost = &get_distance($point, 0);
+
+    # distance from the rest of them, selecting the lowest cost
+    for (my $i=1; $i<$K; $i++) {
+        my $ncost = &get_distance($point, $i);
+        if ($ncost < $cost) {
+            $cost = $ncost;
+        }
+    }
+
+    return $cost;
+}
+
+# get the euclidean distance between two points
+sub get_distance {
+    my $point1 = $points[shift(@_)];
+    my $point2 = $points[shift(@_)];
+
+    my $distance = 0;
+    for (my $i=0; $i<$D; $i++) {
+        my $dist = $inputs[$point1*$D + $i] - $inputs[$point2*$D + $i];
+        $distance += $dist ** 2;
+    }
+
+    return $distance;
+}

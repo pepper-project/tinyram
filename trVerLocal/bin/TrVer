@@ -1,0 +1,13 @@
+#!/bin/bash
+
+SRCDIR=$(dirname "$0")/..
+EXECFILE="$SRCDIR"/build/TrVer
+
+if [ ! -x "$EXECFILE" ]; then
+    echo >&2
+    echo ">>ERROR: please compile trVer first!" >&2
+    echo >&2
+    exit 1;
+fi
+
+exec "$EXECFILE" "$@"

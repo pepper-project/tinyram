@@ -1,0 +1,6 @@
+gen
+build
+dist
+TODO
+*.jo
+*.pyc

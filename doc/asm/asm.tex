@@ -1,0 +1,211 @@
+\documentclass[10pt,letterpaper]{article}
+
+\usepackage{datetime}
+\author{\vspace*{-8ex}\\(rsw)\number\year\twodigit{\number\month}\twodigit{\number\day}}
+\date{\vspace*{-8ex}}
+\newcommand{\bcgtv}{BCGTV}
+\title{\vspace*{-6ex}TinyRAM / Lajos assembler summary}
+
+\pagestyle{plain}
+\setlength{\textwidth}{7in}
+\setlength{\textheight}{9.5in}
+\setlength{\topmargin}{-.25in}
+\setlength{\oddsidemargin}{-.3in}
+\setlength{\headheight}{0in}
+\setlength{\headsep}{0in}
+\setlength{\footskip}{.2in}
+\setlength{\leftmargini}{.25in}
+\widowpenalty=10000
+\clubpenalty=10000
+\parindent=0in
+\parskip=.2in
+\raggedbottom
+\renewcommand{\baselinestretch}{1.2}
+
+\usepackage[scaled=1.04]{inconsolata}
+\usepackage{fouriernc,tgschola}
+\usepackage{cite}
+\usepackage{url}
+\usepackage{amsmath,amsfonts,amssymb,amscd}
+\usepackage{rawfonts}
+\usepackage{longtable}
+\usepackage{bytefield}
+\usepackage{hhline}
+
+\newcommand{\regX}[1]{\ensuremath{\mathtt{r}_{#1}}}
+\def\regi{\regX{i}}
+\def\regin{\regX{i,n}}
+\def\reginn{\regX{i,n+1}}
+\def\regj{\regX{j}}
+\def\regjn{\regX{j,n}}
+\def\regA{\ensuremath{A}}
+\def\regAn{\ensuremath{A_n}}
+\def\flagn{\ensuremath{\mathrm{flag}_n}}
+\def\pcn{\ensuremath{\mathtt{PC}_n}}
+\def\pcnn{\ensuremath{\mathtt{PC}_{n+1}}}
+
+\usepackage{stackengine}
+\def\eqq{\ensuremath{\mathrel{\stackon[0pt]{$=$}{$\scriptstyle?$}}}}
+\def\neqq{\ensuremath{\mathrel{\stackon[0pt]{$\neq$}{$\scriptstyle?$}}}}
+\def\sign{\ensuremath{\mathop{\mathrm{signed}}}}
+\def\memory{\ensuremath{\mathop{\mathrm{memory}}}}
+\def\imm{\ensuremath{\mathrm{immed}}}
+
+%\usepackage[tracking=true,protrusion=true,expansion=true]{microtype}
+\usepackage{microtype}
+\usepackage[T1]{fontenc}
+
+\begin{document}
+
+\maketitle
+
+\thispagestyle{empty}
+
+\section{Lajos architecture}
+
+Much as in vnTinyRAM~\cite{vnTinyRAM}, and unlike the original TinyRAM architecture~\cite{TinyRAM}, Lajos is a von Neumann machine. Its ISA departs from that of the TinyRAM architectures in several other ways, both for programming convenience and efficiency:
+
+\begin{description}
+    \item[Instruction size]
+        \hfill\\As detailed in Section~\ref{format:lajos}, below, Lajos instructions are $w$-sized. This allows us to store one instruction per memory location, but it means that we cannot have full $w$-sized immediate values. If $w$-sized immediates are necessary, they can be encoded in the program text and thus pre-loaded in memory and accessible via \texttt{LOAD}. (Note that unlike a real processor, there is no additional overhead for memory access).
+
+    \item[Computed addressing]
+        \hfill\\Reduced immediate size has an important ramification: immediate values can no longer be used to address all $2^w$ memory locations. This mainly limits the jump and memory access instructions; as a result, in Lajos these instructions are modified such that immediate values offset a base address.
+
+While it would be possible to eliminate computed addressing at the cost of some expressiveness, we offset the increased complexity by recognizing that having relative jumps allows us to neatly eliminate the \texttt{CMOV} instruction.
+
+    \item[Zero register]
+        \hfill\\Borrowing from the MIPS and other RISC machines, Lajos has a \emph{zero register}: any read from \texttt{r0} yields 0, and any write to \texttt{r0} is discarded. This allows further instruction set simplification. In particular, Lajos eliminates all 5 \texttt{CMP}* instructions, adding in their place \texttt{SUBS}; along with \texttt{SUB} and \texttt{XOR}, all functionality is retained. Further, \texttt{MOV} can be eliminated, since a zero operand is always available for the \texttt{ADD}, \texttt{SUB}, \texttt{OR}, and \texttt{XOR} instructions.
+
+    \item[Eliminate \texttt{SHR}]
+        \hfill\\\texttt{SHR} and \texttt{SHL} are both relatively expensive instructions: the limitations of arithmetic circuits dictate that bit shifting a variable distance involves an unrolled loop. Consequently, both \texttt{SHR} and \texttt{SHL} imply a loop of length $w$ in the transition verifier. Lajos reduces this burden by eliminating \texttt{SHR}, since it can be emulated by \texttt{SHL} followed by \texttt{DIV}. The semantics of \texttt{SHL} are also modified from TinyRAM to better accommodate emulated \texttt{SHR}.
+
+    \item[Eliminate \texttt{READ}]
+        \hfill\\The \texttt{READ} instruction becomes quite costly when the tape lengths are large; since the \texttt{READ} instruction must be encoded in the transition verifier, this cost is repeated for each execution step. However, as with the program text itself, the tapes can be pre-loaded into memory before execution starts, obviating the \texttt{READ} instruction entirely. To facilitate this, the Lajos assembler provides two directives, \texttt{inTape} and \texttt{auxTape}, that set the memory location at which the tapes are loaded. (See the \texttt{TrAsm} documentation for more details.)
+
+    \item[Opportunistic instruction set simplification]
+        \hfill\\Lajos's transition verifier is designed to facilitate removing unused instructions from the constraint set. For example, if the program text does not use the \texttt{DIV} instruction, all associated constraints can be automatically removed. In the present implementation, the Lajos assembler indicates via C preprocessor macros which instructions are used in a program listing. These macros enable only the necessary sections of the transition verifier, eliminating the pieces that are never required for a given program. Note that self-modifying code can execute instructions not in the original program listing, potentially making such programs unverifiable on a simplified machine (but in case this is necessary, opportunistic simplification can be disabled).
+\end{description}
+
+\section{Instruction formats}
+
+\subsection{TinyRAM}
+
+Our TinyRAM implementation's instruction format is nearly identical to \bcgtv's~\cite{TinyRAM}, except that the high-order word's zero padding is MSB rather than LSB aligned (in principle, this allows us to bit-split instructions with fewer constraints). Each instruction contains an opcode, the immediate flag, two register addresses \regi\ and \regj, and a $w$-size third operand \regA, which is either interpreted as a register address or an immediate depending on the value of the immediate flag. Each instruction fills two $w$-size words. The high-order word must be able to hold the 5-bit opcode, the immediate flag, and two register addresses, so we require that $w \ge 6 + 2\log k$. For example, when $w=32$ and $k=32$,
+
+\begin{center}
+\begin{bytefield}[bitwidth=0.7em]{64}
+    \bitheader[endianness=big]{63,48,43,41,37,32,0}\\
+    \bitbox{16}{0} & \bitbox{5}{opcode} & \bitbox{1}{I} & \bitbox{5}{\regi} & \bitbox{5}{\regj} & \bitbox{32}{\regA} \\
+\end{bytefield}
+\end{center}
+
+\subsection{Lajos}\label{format:lajos}
+
+Lajos instructions contain the same fields as in TinyRAM, but since they are packed into a single $w$-size word, the immediate size depends on choice of $w$ and $k$. A convenient choice is $w=32$ and $k=32$, yielding a 16-bit immediate. The assembler refuses to proceed if the choice of $w$ and $k$ yield an immediate less than either 8 bits or $\log k$.
+
+\begin{center}
+\begin{bytefield}[bitwidth=1em]{32}
+    \bitheader[endianness=big]{31,27,25,21,16,0}\\
+    \bitbox{5}{opcode} & \bitbox{1}{I} & \bitbox{5}{\regi} & \bitbox{5}{\regj} & \bitbox{16}{\regA} \\
+\end{bytefield}
+\end{center}
+
+\section{Instruction set summary}
+
+The instruction set for our TinyRAM implementation is nearly identical to \bcgtv's~\cite{TinyRAM}, with minor differences in operand use and instruction mnemonics. Lajos shares almost all instructions with TinyRAM, though the semantics of some instructions differ due to our use of computed addressing. Section~\ref{app:inst:c} details the common instructions, while sections~\ref{app:inst:t} and~\ref{app:inst:l} discuss TinyRAM- and Lajos-specific instructions, respectively.
+
+\subsection{Common instructions}\label{app:inst:c}
+
+All arithmetic is 2's complement, which for addition and subtraction naturally comprehends the sign of the operands. Note, however, that flag tests do not comprehend sign unless specifically noted. Thus, adding $2$ and $-1$ produces an overflow even though the result is positive.
+
+The multiplication operators set the flag when an overflow occurs, i.e., when the product takes more than $w$ bits to represent. Note that in the case of \texttt{SMULH}, an overflow occurs if the \emph{signed} value does not fit in $w$ bits, i.e., an overflow occurs unless the most significant $w+1$ bits of the $2w$-bit product are either all one or all zero.
+
+\begin{longtable}[c]{||r|l|p{10cm}|l||}
+    \hhline{|t:====:t|}
+    \parbox{1.5cm}{\textbf{Opcode}} & \parbox[t]{2.5cm}{\textbf{Mnemonic}} & \textbf{Effect} & \parbox[t]{2cm}{\textbf{Flag}} \\
+    \hhline{|:====:|}
+    \endfirsthead
+    \hhline{|t:====:t|}
+    \parbox{1.5cm}{\textbf{Opcode}} & \parbox[t]{2.5cm}{\textbf{Mnemonic}} & \textbf{Effect} & \parbox[t]{2cm}{\textbf{Flag}} \\
+    \hhline{|:====:|}
+    \endhead
+    \hhline{|b:====:b|}
+    \endfoot
+    \hhline{|b:====:b|}
+    \endlastfoot
+    0 & \texttt{AND \regi,\regj,\regA} & $\reginn = \regjn \mathrel{\&} \regAn$ & $\reginn \eqq 0$ \\
+    1 & \texttt{OR \regi,\regj,\regA} & $\reginn = \regjn \mathrel{|} \regAn$ & $\reginn \eqq 0$ \\
+    2 & \texttt{XOR \regi,\regj,\regA} & $\reginn = \regjn \mathrel{\oplus} \regAn$ & $\reginn \eqq 0$ \\
+    3 & \texttt{NOT \regi,\regA} & $\reginn = \mathord{\sim} \regAn$ & $\reginn \eqq 0$ \\
+    4 & \texttt{ADD \regi,\regj,\regA} & $\reginn = \regjn + \regAn \mod 2^w$ & overflow \\
+    5 & \texttt{SUB \regi,\regj,\regA} & $\reginn = \regjn - \regAn$ & $\regjn < \regAn$ \\
+    6 & \texttt{MULL \regi,\regj,\regA} & $\reginn = \regjn \times \regAn \mod 2^w$ & overflow \\
+    7 & \texttt{UMULH \regi,\regj,\regA} & $\reginn = \left(\regjn \times \regAn\right) \gg w$ & overflow \\
+    8 & \texttt{SMULH \regi,\regj,\regA} & \multicolumn{2}{c||}{$\reginn = \left(\sign\regjn \times \sign\regAn\right) \gg w$\hfill signed overflow} \\
+    9 & \texttt{UDIV \regi,\regj,\regA} & $\reginn = \regjn \div \regAn$ (or 0 if $\regAn = 0$) & div by 0 \\
+    10 & \texttt{UMOD \regi,\regj,\regA} & $\reginn = \regjn \mod \regAn$ (or 0 if $\regAn = 0$) & div by 0 \\
+    31 & \texttt{ANSWER \regA} & Machine halts and returns the value \regAn & (no change) \\
+\end{longtable}
+
+\subsection{TinyRAM-specific instructions}\label{app:inst:t}
+
+\begin{longtable}[c]{||r|l|p{10cm}|l||}
+    \hhline{|t:====:t|}
+    \parbox{1.5cm}{\textbf{Opcode}} & \parbox[t]{2.5cm}{\textbf{Mnemonic}} & \textbf{Effect} & \parbox[t]{2cm}{\textbf{Flag}} \\
+    \hhline{|:====:|}
+    \endfirsthead
+    \hhline{|t:====:t|}
+    \parbox{1.5cm}{\textbf{Opcode}} & \parbox[t]{2.5cm}{\textbf{Mnemonic}} & \textbf{Effect} & \parbox[t]{2cm}{\textbf{Flag}} \\
+    \hhline{|:====:|}
+    \endhead
+    \hhline{|b:====:b|}
+    \endfoot
+    \hhline{|b:====:b|}
+    \endlastfoot
+    11 & \texttt{SHL \regi,\regj,\regA} & $\reginn = \regjn \ll \regAn$ & MSB of \regjn \\
+    12 & \texttt{SHR \regi,\regj,\regA} & $\reginn = \regjn \gg \regAn$ & LSB of \regjn \\
+    13 & \texttt{CMPE \regj,\regA} & & $\regjn \eqq \regAn$ \\
+    14 & \texttt{CMPA \regj,\regA} & & $\regjn > \regAn$ \\
+    15 & \texttt{CMPAE \regj,\regA} & & $\regjn \ge \regAn$ \\
+    16 & \texttt{CMPG \regj,\regA} & \multicolumn{2}{r||}{$\sign\regjn > \sign\regAn$} \\
+    17 & \texttt{CMPGE \regj,\regA} & \multicolumn{2}{r||}{$\sign\regjn \ge \sign\regAn$} \\
+    18 & \texttt{MOV \regi,\regA} & $\reginn = \regAn$ & (no change) \\
+    19 & \texttt{CMOV \regi,\regA} & $\reginn = \flagn \mathrel{?} \regAn \mathrel{:} \regin$ & (no change) \\
+    20 & \texttt{JMP \regA} & $\pcnn = \regAn$ & (no change) \\
+    21 & \texttt{CJMP \regA} & $\pcnn = \flagn \mathrel{?} \regAn \mathrel{:} \pcn+1$ & (no change) \\
+    22 & \texttt{CNJMP \regA} & $\pcnn = \flagn \mathrel{?} \pcn+1 \mathrel{:} \regAn$ & (no change) \\
+    28 & \texttt{STORE \regj,\regA} & $\memory\regAn = \regjn$ & (no change) \\
+    29 & \texttt{LOAD \regi,\regA} & $\reginn = \memory\regAn$ & (no change) \\
+    30 & \texttt{READ \regi,\regA} & \reginn\ gets next value from tape \regAn, or 0 if tape is exhausted or nonexistent. Input is tape 0, Auxiliary is 1.& \parbox[t]{2cm}{end of tape\\\raisebox{0.1cm}{or no tape}} \\
+\end{longtable}
+
+\subsection{Lajos-specific instructions}\label{app:inst:l}
+
+Lajos instructions involving immediates do \emph{not} sign-extend the immediate value unless specifically noted!
+
+\begin{longtable}[c]{||r|l|p{10cm}|l||}
+    \hhline{|t:====:t|}
+    \parbox{1.5cm}{\textbf{Opcode}} & \parbox[t]{2.5cm}{\textbf{Mnemonic}} & \textbf{Effect} & \parbox[t]{2cm}{\textbf{Flag}} \\
+    \hhline{|:====:|}
+    \endfirsthead
+    \hhline{|t:====:t|}
+    \parbox{1.5cm}{\textbf{Opcode}} & \parbox[t]{2.5cm}{\textbf{Mnemonic}} & \textbf{Effect} & \parbox[t]{2cm}{\textbf{Flag}} \\
+    \hhline{|:====:|}
+    \endhead
+    \hhline{|b:====:b|}
+    \endfoot
+    \hhline{|b:====:b|}
+    \endlastfoot
+    11 & \texttt{SHL \regi,\regj,\regA} & $\reginn = \regAn \ll \regjn$ & MSB of \regAn \\
+    12 & \texttt{SUBS \regi,\regj,\regA} & \multicolumn{2}{c||}{$\reginn = \sign\regjn - \sign\regAn$\hfill$\sign\regjn < \sign\regAn$} \\
+    20 & \texttt{JMP \regA} & $\pcnn = \imm \mathrel{?} \pcn + \sign\regAn \mathrel{:} \regAn$ & (no change) \\
+    21 & \texttt{CJMP \regA} & $\pcnn = \flagn \mathrel{?} (\imm \mathrel{?} \pcn + \sign\regAn \mathrel{:} \regAn) \mathrel{:} \pcn+1$ & (no change) \\
+    22 & \texttt{CNJMP \regA} & $\pcnn = \flagn \mathrel{?} \pcn+1 \mathrel{:} (\imm \mathrel{?} \pcn + \sign\regAn \mathrel{:} \regAn)$ & (no change) \\
+    28 & \texttt{STORE \regi,\regj,\regA} & $\memory(\regjn + \sign\regAn) = \regin$ & (no change) \\
+    29 & \texttt{LOAD \regi,\regj,\regA} & $\reginn = \memory(\regjn + \sign\regAn)$ & (no change) \\
+\end{longtable}
+
+\bibliography{asm}{}
+\bibliographystyle{acm}
+\end{document}

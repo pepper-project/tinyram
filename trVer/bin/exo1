@@ -1,0 +1,4 @@
+#!/bin/sh
+
+THISDIR=$(dirname $(readlink -f -- "$0"))
+exec java -dsa -da -cp $THISDIR/antlr-3.5.1-complete.jar:$THISDIR/trAsmProgs.jar tinyram.exo.TrExo "$@"

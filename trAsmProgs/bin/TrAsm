@@ -1,0 +1,26 @@
+#!/bin/bash
+
+SRCDIR=$(dirname "$0")/..
+. "$SRCDIR"/build.prop
+JARFILE="$SRCDIR"/"$DIST"/trAsmProgs.jar
+CLSPATH="$JARFILE":"$SRCDIR"/../lib/antlr-3.5.1-complete.jar
+OLDPWD=$(pwd)
+
+if [ $(basename "$0") == TrAsm ]; then
+    EXECCLASS=tinyram.asm.TrAsm
+elif [ $(basename "$0") == TrDasm ]; then
+    EXECCLASS=tinyram.dasm.TrDasm
+elif [ $(basename "$0") == TrExo ]; then
+    EXECCLASS=tinyram.exo.TrExo
+else
+    EXECCLASS=tinyram.sim.TrSim
+fi
+
+if [ ! -f $JARFILE ]; then
+    echo >&2
+    echo ">>ERROR: please compile trAsmProgs first!" >&2
+    echo >&2
+    exit 1;
+fi
+
+exec java -ea -cp "$CLSPATH" "$EXECCLASS" "$@"
