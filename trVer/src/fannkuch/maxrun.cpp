@@ -29,7 +29,8 @@ int main(int argc, char **argv) {
         printf("Invalid sequence length or #flips.\n");
         exit(-1);
     } else {
-        printf("Sequence length: %d\n", seqlen);
+        fprintf(stderr, "Sequence length: %d\n", seqlen);
+        printf("$iter 0\ntape 0 , %d\ntape 0 , %d\n", seqlen, numflips);
     }
 
     input.reserve(seqlen);
@@ -59,15 +60,16 @@ int main(int argc, char **argv) {
         std::next_permutation(input.begin(), input.end());
     } while (! vec_eq(orig, input));
 
-    printf("Total flips in %d permutations: %d\n", numflips, maxtot);
+    fprintf(stderr, "Total flips in %d permutations: %d\n", numflips, maxtot);
     for(int j=1; j<numflips; j++) {
         std::prev_permutation(max.begin(), max.end());
     }
-    printf("[ ");
+    fprintf(stderr, "[ ");
     for(unsigned i=0; i<max.size(); i++) {
-        printf("%d ", max[i]);
+        fprintf(stderr, "%d ", max[i]);
+        printf("tape 0 , %d\n", max[i]);
     }
-    printf("]\n");
+    fprintf(stderr, "]\n");
     return 0;
 }
 

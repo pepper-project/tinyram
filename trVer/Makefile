@@ -38,7 +38,7 @@ SCRIPT_FOLDER=../../scripts/
 ZCCPATH=../../compiler
 ZCCORIG=$(ZCCPATH)/zcc
 ZCCPATCH=lib/zcc.patch
-ZCC_ECS?=--ecs
+#ZCC_ECS?=--ecs --limcsize
 
 all: TR_NUMSTEPS=128
 all: TR_INTAPELEN=1
@@ -70,6 +70,13 @@ build/%.jo: src/%.asm build
 	@echo -n "Assembling $< with TrAsm... "
 	@../trAsmProgs/bin/TrAsm -i -c -p -D $(TR_NUMSTEPS) $(TR_INTAPELEN) $(TR_AUXTAPELEN) -f 2 $< -o $(basename $@)
 	@echo done.
+	@echo
+
+%_nsteps: %.jo
+	@echo "Running $< with TrSim..."
+	@../trAsmProgs/bin/TrSim -c build $< > $@
+	@cat $@
+	@echo Done.
 	@echo
 
 %_out: %.jo
@@ -121,7 +128,7 @@ build/%_pantry: build/zcc/bin/%.qap
 	@mkdir -p $(PEPPER_FOLDER)/apps_sfdl_gen
 	@mkdir -p $(PEPPER_FOLDER)/apps_sfdl_hw
 	@for i in $(INPUTFILES); do \
-		./bin/inputGen.sh $(PREFIX)_ver build/$(PREFIX)_prog_input $$i build/zcc/apps_sfdl_gen/$(PREFIX)_ver_v_inp_gen.cpp; \
+		./bin/inputGen.sh $(PREFIX)_ver build/$(PREFIX)_prog_input $$i $(TR_INTAPELEN) build/zcc/apps_sfdl_gen/$(PREFIX)_ver_v_inp_gen.cpp; \
 		./bin/exoGen.sh $(PREFIX)_ver $(TR_AUXTAPELEN) build/zcc/apps_sfdl_hw/$(PREFIX)_ver_p_exo.cpp; \
 		cp build/zcc/bin/* $(PEPPER_FOLDER)/bin; \
 		cp build/zcc/apps_sfdl_gen/* $(PEPPER_FOLDER)/apps_sfdl_gen; \
@@ -162,14 +169,14 @@ bin/zcc: $(ZCCORIG) $(ZCCPATCH)
 build/zcc/%.ZAATAR.spec: build/% bin/zcc
 	@echo "Building ZAATAR execution verifier from $<..."
 	@mkdir -p build/zcc
-	@./bin/zcc --frontendonly --zccdir $(ZCCPATH) --rundir build/zcc -f $< -t ZAATAR -w 10240 --limcsize --metrics $(ZCC_ECS)
+	@./bin/zcc --frontendonly --zccdir $(ZCCPATH) --rundir build/zcc -f $< -t ZAATAR -w 10240 --metrics $(ZCC_ECS)
 	@echo Done.
 	@echo
 
 build/zcc/bin/%.qap: build/zcc/%.c.ZAATAR.spec bin/zcc
 	@echo "Creating QAP file from specfile $<..."
 	@mkdir -p build/zcc
-	@./bin/zcc --backendonly --zccdir $(ZCCPATH) --rundir build/zcc -f $< -t ZAATAR -w 10240 --limcsize --metrics $(ZCC_ECS)
+	@./bin/zcc --backendonly --zccdir $(ZCCPATH) --rundir build/zcc -f $< -t ZAATAR -w 10240 --metrics $(ZCC_ECS)
 	@echo Done.
 	@echo
 

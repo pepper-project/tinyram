@@ -3,7 +3,8 @@
 PREFIX=$1
 INPUT1=$2
 INPUT2=$3
-OUTFILE=$4
+NTAPE0=$4
+OUTFILE=$5
 
 cat > $OUTFILE << EOF
 #include <apps_sfdl_gen/${PREFIX}_v_inp_gen.h>
@@ -20,7 +21,7 @@ void ${PREFIX}VerifierInpGen::create_input(mpq_t* input_q, int num_inputs) {
 EOF
 
 cat $INPUT1 >> $OUTFILE
-cat $INPUT2 >> $OUTFILE
+head -n $NTAPE0 $INPUT2 >> $OUTFILE
 
 cat >> $OUTFILE << EOF
 

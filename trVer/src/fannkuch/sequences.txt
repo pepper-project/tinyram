@@ -15,4 +15,9 @@ Sequence length: 13
 Total flips in 100 permutations: 4451
 [ 13 7 8 11 1 12 6 9 2 5 4 10 3 ]
 The above sequence requires the most processor cycles for fannkuch_13_100,
-as returned by ./maxrun 13 100 (warning: takes a couple hours)
+as returned by ./maxrun 13 100 (warning: takes a while)
+
+Sequence length: 13, #perms 850
+Total flips in 850 permutations: 33880
+[ 13 10 8 12 11 1 7 6 9 4 3 2 5 ]
+as returned by ./maxrun 13 850

@@ -10,6 +10,7 @@ my $K = $ARGV[1];
 
 if ($N == 0 || $K == 0) {
     print "Usage: $0 N K\n";
+    exit(-1);
 }
 # multiply an N-element vector with an NxN sparse matrix containing at most K nonzero elements
 # input is N K <vector> <elements> <indices> <rptrs>
