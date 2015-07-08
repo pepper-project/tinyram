@@ -1,6 +1,6 @@
---- bin/zcc 2014-08-06 14:05:03.081431654 -0400
-+++ bin/zcc	2014-08-06 14:05:03.085431654 -0400
-@@ -8,10 +8,12 @@
+--- bin/zcc	2015-07-08 14:28:20.863034372 -0400
++++ bin/zcc	2015-07-08 15:15:13.893239543 -0400
+@@ -7,10 +7,12 @@
  verbose=1
  
  #When 0, adds "#include<stdinc.h>" to the top of every c file
@@ -11,9 +11,9 @@
  build=
 -targetdir=.
 +targetdir=__UNSET__
+ depsdir=${HOME}/pepper_deps
  bugginess=0.1
  windowsize=
- prefix=
 @@ -25,10 +27,17 @@
  cql=0
  cqltest=0
@@ -44,7 +44,7 @@
  	-f)  path="$2"; shift;;
  	-b)  bugginess="$2"; shift;;
  	-d)  targetdir="$2"; shift;;
-@@ -49,60 +62,65 @@
+@@ -50,26 +63,10 @@
  	-db-thr-num-addresses-naive) dbThrNumAddressesNaive="$2"; shift;;
    -ram-cell-num-bits) ramCellNumBits="$2"; shift;;
  	-db-hash-num-bits) dbHashNumBits="$2"; shift;;
@@ -75,7 +75,9 @@
  	*)  break;; # terminate while loop
      esac
      shift
- done 
+@@ -77,35 +74,56 @@
+ 
+ export PYTHONPATH=${depsdir}/lib/python/:${PYTHONPATH}
  
 -if [ "$path" == "" ] || [ "$framework" == "" ]; then
 -{
@@ -149,7 +151,7 @@
  extension="${filename##*.}"
  defsfile="$filename.defines"
  echo "" > "$defsfile"
-@@ -112,6 +130,17 @@
+@@ -115,6 +133,17 @@
  TIMER="$TIME_BIN -o tmptime -f"
  PRINT_TIME=
  
@@ -167,7 +169,7 @@
  # If the source file is a .c file, run the preprocessor on it first.
  if [ "$extension" == "c" ]; then
  {
-@@ -130,12 +159,12 @@
+@@ -133,12 +162,12 @@
  
    if [ $cql == 1 ]; then
    {
@@ -183,7 +185,7 @@
      mv "${filename}tmp1.c" "${filename}tmp.c"
      if [ $cqltest == 1 ]; then
      {
-@@ -144,7 +173,7 @@
+@@ -147,7 +176,7 @@
      } fi
    } fi
  
@@ -192,7 +194,7 @@
    if [ $? != 0 ]; then 
    {
      echo "Error in C preprocessor on $path"
-@@ -212,11 +241,10 @@
+@@ -215,11 +244,10 @@
  
  #Build the frontend
  if [ "$build" != "--no-build" ]; then
@@ -206,7 +208,7 @@
      export GOPATH=$(pwd)
      go build vericomp
  
-@@ -232,7 +260,7 @@
+@@ -235,7 +263,7 @@
        exit 1 
      } fi
  
@@ -215,7 +217,7 @@
  fi
  
  if [ $optimize != 0 ]; then
-@@ -240,7 +268,7 @@
+@@ -243,7 +271,7 @@
  
  #Compile the raw source file, with expression combining of ifs (happens only here)
  #Also, we perform all type checking on this pass.
@@ -224,7 +226,7 @@
  
  if [ $? != 0 ]; then 
  { 
-@@ -260,7 +288,7 @@
+@@ -263,7 +291,7 @@
  
  $PRINT_TIME
  
@@ -233,16 +235,16 @@
  
  if [ $? != 0 ]; then 
  { 
-@@ -274,7 +302,7 @@
- $PRINT_TIME
+@@ -281,7 +309,7 @@
+ rm "${circuitFile}2.tac"
  
  #Do optimization based on the .profile file
 -$TIMER "metric_compile_2_utime $classname %U\nmetric_compile_2_stime $classname %S\n" java "$javaargs" -cp frontend/bin zcc.ZCC --profile ${circuitFile}2.profile ${circuitFile}2 $compileropts c${inlining}wfa "$path"
 +$TIMER "metric_compile_2_utime $classname %U\nmetric_compile_2_stime $classname %S\n" java "$javaargs" -cp "$BASEDIR"/frontend/bin zcc.ZCC --profile ${circuitFile}2.profile ${circuitFile}2 $compileropts c${inlining}wfa "$path"
  
- if [ $? != 0 ]; then 
- { 
-@@ -293,7 +321,7 @@
+ # don't need these any more. save disk space
+ rm "${circuitFile}2"
+@@ -304,7 +332,7 @@
  #Redundant code elimination doesn't scale. It requires holding the entire circuit in a content addressable database
  #  mv -f "$circuitFile" "${circuitFile}3"
  #  tac "${circuitFile}3" > "${circuitFile}3.tac"
@@ -251,8 +253,8 @@
  #  if [ $? != 0 ]; then 
  #  { 
  #    exit 1 
-@@ -309,7 +337,7 @@
- $TIMER "metric_compile_tac4_utime $classname %U\nmetric_compile_tac4_stime $classname %S\n" perl -e 'print reverse <>' < "${circuitFile}4" > "${circuitFile}4.tac"
+@@ -320,7 +348,7 @@
+ $TIMER "metric_compile_tac4_utime $classname %U\nmetric_compile_tac4_stime $classname %S\n" tac < "${circuitFile}4" > "${circuitFile}4.tac"
  
  $PRINT_TIME
 -$TIMER "metric_compile_p4_utime $classname %U\nmetric_compile_p4_stime $classname %S\n" java "$javaargs" -cp frontend/bin zcc.ZCC $compileropts p ${circuitFile}4.tac
@@ -260,7 +262,7 @@
  if [ $? != 0 ]; then 
  { 
    exit 1 
-@@ -321,7 +349,7 @@
+@@ -332,7 +360,7 @@
  
  $PRINT_TIME
  #Run the compiler
@@ -269,7 +271,7 @@
  if [ $? != 0 ]; then 
  { 
    exit 1 
-@@ -339,7 +367,7 @@
+@@ -350,7 +378,7 @@
  { # No optimize
  
  #Just run a single pass to produce an unoptimized spec file
@@ -278,7 +280,7 @@
  if [ $? != 0 ]; then 
  { 
    exit 1 
-@@ -349,10 +377,10 @@
+@@ -360,10 +388,10 @@
  mv -f "$circuitFile" "${circuitFile}4"
  #Perform profiling on the circuit
  tac "${circuitFile}4" > "${circuitFile}4.tac"
@@ -291,7 +293,7 @@
  if [ $? != 0 ]; then 
  { 
    exit 1 
-@@ -362,24 +390,33 @@
+@@ -373,24 +401,33 @@
  
  #spec file produced
  specfile="$filename.$framework.spec"
@@ -334,7 +336,7 @@
  
  #echo $backendArgs
  
-@@ -391,6 +428,84 @@
+@@ -402,6 +439,84 @@
  } fi
  
  $PRINT_TIME
