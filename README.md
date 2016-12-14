@@ -43,4 +43,4 @@ ePrint also available: https://eprint.iacr.org/2013/879
 
 Ben-Sasson, E., Chiesa, A., Genkin, D., Tromer, E., and Virza, M.
 "TinyRAM Architecture Specification v0.991."
-http://www.scipr-lab.org/system/files/TinyRAM-spec-0.991.pdf
+http://www.scipr-lab.org/doc/TinyRAM-spec-0.991.pdf
